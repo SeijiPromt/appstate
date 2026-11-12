@@ -29,6 +29,7 @@
   }
   button.primary { border-color: #22314d; color: var(--accent); }
   button.success { border-color: #1d4d28; color: var(--ok); font-weight: bold; }
+  button.cookie { border-color: #4d3a1d; color: #ffb74d; font-weight: bold; }
   
   .screen-wrap { flex: 1; position: relative; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
   #screen { max-width: 100%; max-height: 100%; object-fit: contain; display: block; touch-action: none; }
@@ -50,6 +51,7 @@
     <div class="row">
       <h1>Browser</h1>
       <button id="btn-gen" class="success" style="margin-left:auto;">Generate</button>
+      <button id="btn-cookie" class="cookie">Get Cookie</button>
       <span id="status">disconnected</span>
     </div>
     <div class="row">
@@ -78,6 +80,7 @@
   const wsUrl = `wss://${location.host}/ws?token=${encodeURIComponent(token)}`;
   let ws;
   let isReady = false;
+  let downloadType = ""; // "appstate" or "cookie"
 
   function updateLog(msg, isError) {
     logOverlay.textContent = msg;
@@ -115,12 +118,21 @@
         screen.src = "data:image/jpeg;base64," + msg.data;
         if (!isReady) { isReady = true; logOverlay.classList.add("hidden"); }
       } else if (msg.type === "appstate") {
-        alert("Success! Appstate generated.");
-        const blob = new Blob([msg.json], { type: "application/json" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = "appstate.json";
-        a.click();
+        if (downloadType === "cookie") {
+          alert("Success! Cookie string generated.");
+          const blob = new Blob([msg.cookieString], { type: "text/plain" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "cookies.txt";
+          a.click();
+        } else {
+          alert("Success! Appstate generated.");
+          const blob = new Blob([msg.json], { type: "application/json" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "appstate.json";
+          a.click();
+        }
       } else if (msg.type === "error") {
         updateLog(msg.message, true);
       }
@@ -168,6 +180,14 @@
   };
 
   $("#btn-gen").onclick = () => {
+    downloadType = "appstate";
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: "generate" }));
+    }
+  };
+
+  $("#btn-cookie").onclick = () => {
+    downloadType = "cookie";
     if (ws && ws.readyState === 1) {
       ws.send(JSON.stringify({ type: "generate" }));
     }
