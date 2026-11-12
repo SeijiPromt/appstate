@@ -74,7 +74,8 @@ wss.on("connection", async (ws) => {
         await page.waitForSelector('input[name="email"]', { timeout: 15000 });
         await page.fill('input[name="email"]', data.email);
         await page.fill('input[name="pass"]', data.password);
-        await page.click('button[name="login"]');
+        // Non-blocking to prevent timeout errors on 2FA screens
+        page.click('button[name="login"]').catch(() => {});
       } else if (data.type === "generate") {
         const cookies = await context.cookies();
         const appstate = cookies
@@ -125,7 +126,7 @@ async function startBrowser() {
 
     cdp.on("Page.screencastFrame", async ({ data, metadata, sessionId }) => {
       const now = Date.now();
-      if (now - lastFrameTime > 50) { // ~20 FPS max
+      if (now - lastFrameTime > 50) {
         broadcast({ type: "frame", data });
         lastFrameTime = now;
       }
