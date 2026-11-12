@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg: #0b0d10; --panel: #0e1116; --line: #1f242c;
-    --text: #e7eaee; --dim: #8892a0; --accent: #4f8cff;
+    --text: #e7eaee; --dim: #8892a0; --accent: #4f8cff; --err: #ff6b6b;
   }
   * { box-sizing: border-box; touch-action: manipulation; }
   body {
@@ -15,7 +15,7 @@
     font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
     height: 100vh; display: flex; flex-direction: column; overflow: hidden;
   }
-  .header { padding: 10px; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .header { padding: 10px; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
   .row { display: flex; gap: 6px; align-items: center; }
   h1 { margin: 0; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
   input {
@@ -25,12 +25,22 @@
   input:focus { border-color: var(--accent); }
   button {
     background: #14181e; border: 1px solid #2a3038; color: var(--text);
-    padding: 8px 12px; border-radius: 4px; font: inherit; cursor: pointer;
+    padding: 8px 12px; border-radius: 4px; font: inherit; cursor: pointer; white-space: nowrap;
   }
   button.primary { border-color: #22314d; color: var(--accent); }
-  .screen-wrap { flex: 1; position: relative; background: #000; overflow: hidden; }
-  #screen { width: 100%; height: 100%; object-fit: contain; display: block; touch-action: none; }
-  .footer { padding: 10px; background: var(--panel); border-top: 1px solid var(--line); display: flex; gap: 6px; }
+  
+  .screen-wrap { flex: 1; position: relative; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  #screen { max-width: 100%; max-height: 100%; object-fit: contain; display: block; touch-action: none; }
+  
+  #log-overlay {
+    position: absolute; top: 10px; left: 10px; right: 10px;
+    background: rgba(0,0,0,0.8); border: 1px solid var(--line);
+    padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px;
+    color: #4ade80; pointer-events: none; opacity: 1; transition: opacity 0.5s;
+  }
+  #log-overlay.hidden { opacity: 0; }
+
+  .footer { padding: 10px; background: var(--panel); border-top: 1px solid var(--line); display: flex; gap: 6px; flex-shrink: 0; }
   #status { color: var(--dim); font-size: 11px; margin-left: auto; }
 </style>
 </head>
@@ -38,7 +48,7 @@
   <div class="header">
     <div class="row">
       <h1>Browser</h1>
-      <span id="status" style="margin-left:auto">connecting...</span>
+      <span id="status" style="margin-left:auto">disconnected</span>
     </div>
     <div class="row">
       <input type="email" id="email" placeholder="FB Email" />
@@ -46,9 +56,12 @@
       <button id="btn-login" class="primary">Login</button>
     </div>
   </div>
+  
   <div class="screen-wrap">
+    <div id="log-overlay">Waiting for connection...</div>
     <img id="screen" />
   </div>
+
   <div class="footer">
     <input type="text" id="text-input" placeholder="Tap here to type (for 2FA / Checkpoints)..." />
     <button id="btn-gen" class="primary">Generate</button>
@@ -58,21 +71,49 @@
   const $ = s => document.querySelector(s);
   const statusEl = $("#status");
   const screen = $("#screen");
+  const logOverlay = $("#log-overlay");
   
   const token = new URLSearchParams(location.search).get("t") || "";
   const wsUrl = `wss://${location.host}/ws?token=${encodeURIComponent(token)}`;
   let ws;
+  let isReady = false;
+
+  function updateLog(msg) {
+    logOverlay.textContent = msg;
+    logOverlay.classList.remove("hidden");
+  }
 
   function connect() {
+    updateLog("Connecting to WebSocket...");
     ws = new WebSocket(wsUrl);
-    ws.onopen = () => { statusEl.textContent = "connected"; statusEl.style.color = "var(--text)"; };
-    ws.onclose = () => { statusEl.textContent = "disconnected"; statusEl.style.color = "red"; setTimeout(connect, 2000); };
+    
+    ws.onopen = () => { 
+      statusEl.textContent = "connected"; 
+      statusEl.style.color = "var(--text)"; 
+    };
+    
+    ws.onclose = () => { 
+      statusEl.textContent = "disconnected"; 
+      statusEl.style.color = "var(--err)"; 
+      isReady = false;
+      updateLog("WebSocket disconnected. Reconnecting in 2s...");
+      setTimeout(connect, 2000); 
+    };
+
+    ws.onerror = () => {
+      updateLog("WebSocket error. Check if token is correct.");
+    };
+    
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
-      if (msg.type === "frame") {
+      
+      if (msg.type === "log") {
+        updateLog(msg.text);
+      } else if (msg.type === "frame") {
         screen.src = "data:image/jpeg;base64," + msg.data;
+        if (!isReady) { isReady = true; logOverlay.classList.add("hidden"); }
       } else if (msg.type === "appstate") {
-        alert("Success! Appstate generated.\nUID: " + JSON.parse(msg.json).find(c => c.key === "c_user").value);
+        alert("Success! Appstate generated.");
         const blob = new Blob([msg.json], { type: "application/json" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
@@ -80,14 +121,15 @@
         a.click();
       } else if (msg.type === "error") {
         alert(msg.message);
+        updateLog(msg.message);
       }
     };
   }
   connect();
 
-  // Send touch/click to Chromium
   screen.addEventListener("touchstart", (e) => {
     e.preventDefault();
+    if (!isReady) return;
     const rect = screen.getBoundingClientRect();
     const touch = e.touches[0];
     const x = (touch.clientX - rect.left) * (1280 / rect.width);
@@ -96,13 +138,13 @@
   });
 
   screen.addEventListener("click", (e) => {
+    if (!isReady) return;
     const rect = screen.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (1280 / rect.width);
     const y = (e.clientY - rect.top) * (900 / rect.height);
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "click", x, y }));
   });
 
-  // Send keyboard input
   $("#text-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       const text = e.target.value;
