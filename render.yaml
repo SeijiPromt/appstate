@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: browser-stream
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: ACCESS_TOKEN
+        sync: false
+      - key: DATA_DIR
+        value: /data
+    disk:
+      name: profile-data
+      mountPath: /data
+      sizeGB: 1
