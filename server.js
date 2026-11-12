@@ -74,7 +74,6 @@ wss.on("connection", async (ws) => {
         await page.waitForSelector('input[name="email"]', { timeout: 15000 });
         await page.fill('input[name="email"]', data.email);
         await page.fill('input[name="pass"]', data.password);
-        // Non-blocking to prevent timeout errors on 2FA screens
         page.click('button[name="login"]').catch(() => {});
       } else if (data.type === "generate") {
         const cookies = await context.cookies();
@@ -87,9 +86,11 @@ wss.on("connection", async (ws) => {
             lastAccessed: new Date().toISOString(),
           }));
         const cuser = appstate.find(c => c.key === "c_user");
+        
         if (cuser) {
           const json = JSON.stringify(appstate, null, 2);
-          ws.send(JSON.stringify({ type: "appstate", json }));
+          const cookieString = appstate.map(c => `${c.key}=${c.value}`).join('; ');
+          ws.send(JSON.stringify({ type: "appstate", json, cookieString }));
         } else {
           ws.send(JSON.stringify({ type: "error", message: "Not logged in (no c_user)" }));
         }
@@ -126,7 +127,7 @@ async function startBrowser() {
 
     cdp.on("Page.screencastFrame", async ({ data, metadata, sessionId }) => {
       const now = Date.now();
-      if (now - lastFrameTime > 50) {
+      if (now - lastFrameTime > 50) { // ~20 FPS max
         broadcast({ type: "frame", data });
         lastFrameTime = now;
       }
