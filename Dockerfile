@@ -16,4 +16,6 @@ ENV DATA_DIR=/data
 VOLUME ["/data"]
 
 EXPOSE 8000
+
+# Diretso na sa node, walang Xvfb
 CMD ["node", "server.js"]
