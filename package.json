@@ -1,0 +1,10 @@
+{
+  "name": "browser-stream",
+  "version": "1.0.0",
+  "main": "server.js",
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0",
+    "playwright": "^1.48.0"
+  }
+}
