@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Browser Stream</title>
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #0e1116; --line: #1f242c;
+    --text: #e7eaee; --dim: #8892a0; --accent: #4f8cff;
+  }
+  * { box-sizing: border-box; touch-action: manipulation; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .header { padding: 10px; background: var(--panel); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; gap: 6px; align-items: center; }
+  h1 { margin: 0; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+  input {
+    flex: 1; background: #0b0d10; border: 1px solid #2a3038; color: var(--text);
+    padding: 8px; border-radius: 4px; font: inherit; outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  button {
+    background: #14181e; border: 1px solid #2a3038; color: var(--text);
+    padding: 8px 12px; border-radius: 4px; font: inherit; cursor: pointer;
+  }
+  button.primary { border-color: #22314d; color: var(--accent); }
+  .screen-wrap { flex: 1; position: relative; background: #000; overflow: hidden; }
+  #screen { width: 100%; height: 100%; object-fit: contain; display: block; touch-action: none; }
+  .footer { padding: 10px; background: var(--panel); border-top: 1px solid var(--line); display: flex; gap: 6px; }
+  #status { color: var(--dim); font-size: 11px; margin-left: auto; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="row">
+      <h1>Browser</h1>
+      <span id="status" style="margin-left:auto">connecting...</span>
+    </div>
+    <div class="row">
+      <input type="email" id="email" placeholder="FB Email" />
+      <input type="password" id="pass" placeholder="Password" />
+      <button id="btn-login" class="primary">Login</button>
+    </div>
+  </div>
+  <div class="screen-wrap">
+    <img id="screen" />
+  </div>
+  <div class="footer">
+    <input type="text" id="text-input" placeholder="Tap here to type (for 2FA / Checkpoints)..." />
+    <button id="btn-gen" class="primary">Generate</button>
+  </div>
+
+<script>
+  const $ = s => document.querySelector(s);
+  const statusEl = $("#status");
+  const screen = $("#screen");
+  
+  const token = new URLSearchParams(location.search).get("t") || "";
+  const wsUrl = `wss://${location.host}/ws?token=${encodeURIComponent(token)}`;
+  let ws;
+
+  function connect() {
+    ws = new WebSocket(wsUrl);
+    ws.onopen = () => { statusEl.textContent = "connected"; statusEl.style.color = "var(--text)"; };
+    ws.onclose = () => { statusEl.textContent = "disconnected"; statusEl.style.color = "red"; setTimeout(connect, 2000); };
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "frame") {
+        screen.src = "data:image/jpeg;base64," + msg.data;
+      } else if (msg.type === "appstate") {
+        alert("Success! Appstate generated.\nUID: " + JSON.parse(msg.json).find(c => c.key === "c_user").value);
+        const blob = new Blob([msg.json], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "appstate.json";
+        a.click();
+      } else if (msg.type === "error") {
+        alert(msg.message);
+      }
+    };
+  }
+  connect();
+
+  // Send touch/click to Chromium
+  screen.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    const rect = screen.getBoundingClientRect();
+    const touch = e.touches[0];
+    const x = (touch.clientX - rect.left) * (1280 / rect.width);
+    const y = (touch.clientY - rect.top) * (900 / rect.height);
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "click", x, y }));
+  });
+
+  screen.addEventListener("click", (e) => {
+    const rect = screen.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (1280 / rect.width);
+    const y = (e.clientY - rect.top) * (900 / rect.height);
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "click", x, y }));
+  });
+
+  // Send keyboard input
+  $("#text-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const text = e.target.value;
+      e.target.value = "";
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: "type", text }));
+        ws.send(JSON.stringify({ type: "press", key: "Enter" }));
+      }
+    }
+  });
+
+  $("#btn-login").onclick = () => {
+    const email = $("#email").value.trim();
+    const password = $("#pass").value;
+    if (!email || !password) return alert("Email and password required");
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: "login", email, password }));
+      $("#pass").value = "";
+    }
+  };
+
+  $("#btn-gen").onclick = () => {
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: "generate" }));
+    }
+  };
+</script>
+</body>
+</html>
