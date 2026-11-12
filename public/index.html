@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg: #0b0d10; --panel: #0e1116; --line: #1f242c;
-    --text: #e7eaee; --dim: #8892a0; --accent: #4f8cff; --err: #ff6b6b;
+    --text: #e7eaee; --dim: #8892a0; --accent: #4f8cff; --err: #ff6b6b; --ok: #4ade80;
   }
   * { box-sizing: border-box; touch-action: manipulation; }
   body {
@@ -20,7 +20,7 @@
   h1 { margin: 0; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
   input {
     flex: 1; background: #0b0d10; border: 1px solid #2a3038; color: var(--text);
-    padding: 8px; border-radius: 4px; font: inherit; outline: none;
+    padding: 8px; border-radius: 4px; font: inherit; outline: none; min-width: 0;
   }
   input:focus { border-color: var(--accent); }
   button {
@@ -28,6 +28,7 @@
     padding: 8px 12px; border-radius: 4px; font: inherit; cursor: pointer; white-space: nowrap;
   }
   button.primary { border-color: #22314d; color: var(--accent); }
+  button.success { border-color: #1d4d28; color: var(--ok); font-weight: bold; }
   
   .screen-wrap { flex: 1; position: relative; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
   #screen { max-width: 100%; max-height: 100%; object-fit: contain; display: block; touch-action: none; }
@@ -36,7 +37,7 @@
     position: absolute; top: 10px; left: 10px; right: 10px;
     background: rgba(0,0,0,0.8); border: 1px solid var(--line);
     padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px;
-    color: #4ade80; pointer-events: none; opacity: 1; transition: opacity 0.5s;
+    color: var(--ok); pointer-events: none; opacity: 1; transition: opacity 0.5s;
   }
   #log-overlay.hidden { opacity: 0; }
 
@@ -48,7 +49,8 @@
   <div class="header">
     <div class="row">
       <h1>Browser</h1>
-      <span id="status" style="margin-left:auto">disconnected</span>
+      <button id="btn-gen" class="success" style="margin-left:auto;">Generate</button>
+      <span id="status">disconnected</span>
     </div>
     <div class="row">
       <input type="email" id="email" placeholder="FB Email" />
@@ -63,8 +65,7 @@
   </div>
 
   <div class="footer">
-    <input type="text" id="text-input" placeholder="Tap here to type (for 2FA / Checkpoints)..." />
-    <button id="btn-gen" class="primary">Generate</button>
+    <input type="text" id="text-input" placeholder="Type 2FA code here, then press Enter..." />
   </div>
 
 <script>
@@ -78,8 +79,9 @@
   let ws;
   let isReady = false;
 
-  function updateLog(msg) {
+  function updateLog(msg, isError) {
     logOverlay.textContent = msg;
+    logOverlay.style.color = isError ? "var(--err)" : "var(--ok)";
     logOverlay.classList.remove("hidden");
   }
 
@@ -89,19 +91,19 @@
     
     ws.onopen = () => { 
       statusEl.textContent = "connected"; 
-      statusEl.style.color = "var(--text)"; 
+      statusEl.style.color = "var(--ok)"; 
     };
     
     ws.onclose = () => { 
       statusEl.textContent = "disconnected"; 
       statusEl.style.color = "var(--err)"; 
       isReady = false;
-      updateLog("WebSocket disconnected. Reconnecting in 2s...");
+      updateLog("WebSocket disconnected. Reconnecting in 2s...", true);
       setTimeout(connect, 2000); 
     };
 
     ws.onerror = () => {
-      updateLog("WebSocket error. Check if token is correct.");
+      updateLog("WebSocket error. Check if token is correct.", true);
     };
     
     ws.onmessage = (e) => {
@@ -120,8 +122,7 @@
         a.download = "appstate.json";
         a.click();
       } else if (msg.type === "error") {
-        alert(msg.message);
-        updateLog(msg.message);
+        updateLog(msg.message, true);
       }
     };
   }
